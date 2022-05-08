@@ -644,6 +644,7 @@ public void Render (ScriptableRenderContext context, Camera camera) {
 
 # 3.5 绘制Unity UI
 另一个需要我们注意的是Unity游戏内的用户界面。举个例子，通过GameObject/UI/Button创建一个简单的按钮，它们会显示在游戏窗体中，但是不会显示在场景窗口中。
+
 ![](https://catlikecoding.com/unity/tutorials/custom-srp/custom-render-pipeline/editor-rendering/ui-button.png)
 
 *游戏窗口中的UI按钮*
@@ -651,6 +652,7 @@ public void Render (ScriptableRenderContext context, Camera camera) {
 >如果你不能创建UI按钮，你需要看看你是不是添加了Unity UI这个包。
 
 Frame Debugger显示UI被单独渲染了，但是不在我们的渲染管线里面。
+
 ![](https://catlikecoding.com/unity/tutorials/custom-srp/custom-render-pipeline/editor-rendering/ui-debugger.png)
 
 *frame debugger中的UI*
@@ -695,6 +697,7 @@ partial void PrepareForSceneWindow ();
 
 ## 4.1 两个相机
 每个相机都有一个深度值，主相机默认为-1。它们按照深度递增渲染。要看这个，请复制一个主相机，重命名为Secondary Camera, 设置它的深度为0。给它一个新的tag，因为MainCamera这个tag只能被一个相机使用。
+
 ![](https://catlikecoding.com/unity/tutorials/custom-srp/custom-render-pipeline/multiple-cameras/two-cameras-sample-sample.png)
 
 *相机都分组到了一个样本范围内*
@@ -798,11 +801,13 @@ partial class CameraRenderer {
 *层级切换到Ignore Raycast*
 
 在Main Camera中通过Culling Mask排除这个层。
+
 ![](https://catlikecoding.com/unity/tutorials/custom-srp/custom-render-pipeline/multiple-cameras/culling-ignore-raycast.png)
 
 *剔除Ignore Raycast层*
 
 同时让Secondary Camera只看这一层。
+
 ![](https://catlikecoding.com/unity/tutorials/custom-srp/custom-render-pipeline/multiple-cameras/only-ignore-raycast.png)
 
 *剔除除Ignore Raycast之外的所有层*
