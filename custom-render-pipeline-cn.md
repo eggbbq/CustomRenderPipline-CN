@@ -1,4 +1,4 @@
-# **自定义渲染管线** 控制渲染
+**<font size=60>自定义渲染管线</font> 控制渲染**
 
 1. *创建一个渲染管线资源和管线实例*
 2. *渲染相机视图*
@@ -16,7 +16,7 @@
 
 *使用自定义渲染管线渲染*
 
-## 1 新的渲染管线
+# 1 新的渲染管线
 要渲染任何东西，Unity需要确定它的形状，位置，实践还有用什么样的设置。它可能会很复杂，这取决与涉及多少效果。灯光，阴影，透明，图像特效，体积特效等等，在渲染到最后的图像之前都需要正确有序的处理。这就是渲染管线要做的。
 
 在之前，Unity在内置管线中支持很少的渲染事情。Unity 2018 引入了可编写脚本的渲染管线（简称 RP），使我们可以做任何我们想做的事情，同时仍然能够依赖 Unity 进行基本步骤，例如剔除。Unity2018还用这个新的方法，添加了两个实验性的RP：轻量级管线和高清管线。在Unity2019中，轻量级管线不在实验性的了，它被更名为通用渲染管线。
@@ -26,7 +26,7 @@
 这个教程为，使用最小的渲染管线，用前向渲染管线绘制无光照形状，打基础。当这些都完成了，我们就可以在之后的教程中扩展我们的管线，添加光照，阴影，不同的渲染方法，和更多其高级功能。
 
 
-### 1.1 项目设置
+## 1.1 项目设置
 
 用Unity2019.2.6+创建一个新的3D项目。我们将创建自己的管线，隐藏不要选择RP项目模版。打开项目你可以通过Package Manager删除所有不需要的包。在这个教程中我们只需要Unity UI包，来实验绘制UI，所以你可以保留它。
 
@@ -48,7 +48,7 @@
 
 *测试场景*
 
-### 1.2 管线资源
+## 1.2 管线资源
 此时，Unity使用的是默认管线。要替换成自定义管线，我们首先要为此创建一个资源类型。我们使用和通用渲染管线相同的文件夹结构。创建一个CustomRenderPipeline的C#脚本类。
 
 ![](https://catlikecoding.com/unity/tutorials/custom-srp/custom-render-pipeline/a-new-render-pipeline/folder-structure.png)
@@ -88,7 +88,7 @@ public class CustomRenderPipelineAsset : RenderPipeline {...}
 
 替换默认的RP改变了一些东西。首先，一些选项从Graphics Settings信息面板中消失了。其次，我们禁用了默认管线同时又没有提供一个有效的替代，因此什么都不在渲染了。游戏窗口，场景窗口，材质预览都不在起作用。如果你通过FrameDebuger查看，你会发现游戏窗体中确确实实什么都没有绘制。
 
-### 1.3 渲染管线实例
+## 1.3 渲染管线实例
 
 创建一个叫CustomRenderPipeline的类，放在和CustomRenderPipelineAsset同一个文件中。这将是是我们RP实例返回的类型，因此他必须继承RenderPipeline, 重写Render方法，它有两个参数，一个是ScriptableRenderContext，一个是Camera数组，现在让方法空着。
 
@@ -114,11 +114,11 @@ protected overrde RenderPipeline CreatePipeline()
 }
 ```
 
-## 2 渲染
+# 2 渲染
 
 每一帧Unity都会调用RP实例的Render方法。它传递一个上下文结构体，该结构用于连接本机引擎，我们用它来渲染。它还传递一组相机，因为场景中可能有多个激活的相机。这就是RP的职责，按照相机的顺序渲染他们。
 
-### 2.1 相机渲染器
+## 2.1 相机渲染器
 
 每个相机独立渲染。因此，与其把所有的相机都交给CustomRenderPipeline渲染，我们不如更近一步，指定一个新的class专门用于渲染一个相机。我们把它叫做CamerRender，给它一个public Render方法，带有一个上下文 和相机参数。我们把这些个参数存到类的字段中，以便访问。
 
@@ -151,7 +151,7 @@ protected override void Render (ScriptableRenderContext context, Camera[] camera
 ```
 我们的相机渲染器大致等于URP的渲染器了。这个方法在将来让支持，每个相机不同的渲染方式变得简单。比如说，一个相机用于渲染第一人称视角，一个相机用于渲染3D小地图，或前向渲染延迟渲染。 但是现在，我们会让所有相机用同样的方式渲染。
 
-### 2.2 绘制天空盒
+## 2.2 绘制天空盒
 
 CamerRenderer.Render的任务是渲染所有相机看见的几何体。为了结构清晰，编程习惯上是一个方法做一个事情，所以这里把绘制集合体放在单独的方法中DrawVisiableGeometry.
 
@@ -235,7 +235,7 @@ void Submit()
 
 *天空盒正确对齐*
 
-### 2.3 命令缓冲
+## 2.3 命令缓冲
 
 上下文渲染延迟的，直到我们提交时才会真正地渲染。在此之前，我们对上下文配置和添加命令，用于后续的执行。一些任务，比如说绘制天空盒，可以通过发布一个确定的方法来绘制，但是其他的一些命令需要间接地通过一个单独的命令缓冲完成。我们需要这样的一个缓冲来绘制场景中其他的几何体。
 
@@ -289,7 +289,7 @@ Camera.RenderSkybox样本现在被嵌套在来Render Camera内部。
 
 *渲染相机样本*
 
-### 2.4 清理渲染目标
+## 2.4 清理渲染目标
 无论我们绘制什么，最终都会渲染到相机目标，默认是帧缓冲区，但是也可以是渲染纹理。在绘制时，由于早先绘制的东西还存在缓冲区里面，这会干扰我们正则渲染的图像。确保正确的渲染，我们需要清理渲染目标，以摆脱旧内容的干扰。通过调用buffer的ClearRenderTarget，可以做到。
 ```c#
 void Setup()
@@ -337,7 +337,7 @@ void Setup()
 
 现在我们可以看到 Clear(color+Z+stencil), 它指明了颜色和深度缓冲都被清理了。Z表示深度缓冲，stencil数据表示同一个buffer的另一个部分。
 
-### 2.5 剔除
+## 2.5 剔除
 我们现在看到了天空盒，但是看不见任何我们放在场景中的物体。我们将绘制所有相机看得见的的物体，而不是绘制所有物体。我们从场景中的渲染组建开始，然后通过相机的视锥体剔除这些物体。
 
 搞清楚什么能被剔除，需要我们跟踪多个相机设置和矩阵，这些信息包涵在ScriptableCullingParameters 这个结构体里面。我们通过调用相机的TryGetCullingParameters的方法来获得此结构体，而不是自己设置值。这个方法返回是否参数能成功的返回，因为有可能因为相机设置而失败。这个函数需要我们提供一个out参数来获得返回值。在我们的代码中，用一个单独的函数来返回此值。(*在此，我省略了ref/out相关的篇幅, 这个太基础了，作者实在太细节了*)
@@ -382,7 +382,7 @@ public Cull()
     return false;
 }
 ```
-### 2.6 绘制几何图形
+## 2.6 绘制几何图形
 一旦我们知道什么东西可见，我们就可以继续渲染这些东西。调用context的DrawRenderers方法，它要求传入剔除的结果结构体(CullingResults),告诉它使用哪些渲染器。同时，还需提供绘图设置(DrawingSettings)和过滤设置(FilterSettings)作为ref参数, 它们都是结构体。在我们编写的DrawVisibleGeometry函数中，绘制天空盒之前调用。
 ```c#
 void DrawVisibleGeometry()
@@ -439,7 +439,7 @@ var sortingSettings = new SortingSettings(camera){
 
 现在物体或多或少有些从前向后(front-to-back)绘制，这是不透明物体理想的选择。如果一个物体在另一个物体背后，它被遮挡的部分偏移着色就被跳过，这可以提高渲染速度。常见的不透明排序还考虑其他一些标准，比如渲染队列和材质。
 
-### 2.7 分开绘制不透明和透明的几何图形
+## 2.7 分开绘制不透明和透明的几何图形
 Frame Debugger给我们展示了透明物体绘制了出来，但是天空盒绘制在了不透明物体上面。天空盒在不透明几何图形之后绘制，它被不透明物体遮挡的部分片元可跳过，但是它覆盖了透明的几何图形。产生这个问题的是因为，透明着色器不会写到深度缓冲区，它不会遮挡后面的物体，因为我们是可以透过透明物体看到后面的物体的。解决这个问题的办法是，先绘制不透明物体，在绘制天空盒，然后绘制透明物体。
 
 我们可以在调用DrawRenders时，使用RenderQueueRange.opaque，消除透明对象。
@@ -468,10 +468,10 @@ context.DrawRenderers(cullingResults, ref drawingSettings, ref filteringSettings
 
 不幸的是，【从后向前排序】不能保证得到正确的混合，因为排序争对每个物体，基于它的位置。相交的两个大的透明物体还是会产生不正确的结果。这个不正确的结果，有时候可以通过把大的几何图形切割成更小的部分来解决。
 
-## 3 编辑器渲染
+# 3 编辑器渲染
 我们的RP正确地绘制了无光照物体，但是这里还可以做些事情来提升Unity编辑器的工作体验。
 
-### 3.1 绘制旧版着色器
+## 3.1 绘制旧版着色器
 因为我们的管线只支持unlit着色器通道，使用其他通道将不会被渲染，使得透明不可见。虽然这是正确的，但是它却隐藏了一个事实：场景中有些物体使用了错误的着色器。因此，让我们以某种方式渲染它们，不过要分开处理。
 
 如果有人从默认的Unity项目开始，之后在切换到我们的RP，他的场景中很可能有很多使用错误着色器的物体。要覆盖所有Unity默认的着色器，我们需要使用到这些着色器ID
@@ -528,7 +528,7 @@ for (int i = 1; i < legacyShaderTagIds.Length; i++) {
 使用标准着色器的对象也渲染出来了，但是它们它们现在是纯黑色的，因为我们的RP没有设置着色器需要的属性。<br>
 **实际上我在2022实践的时候，它们不是黑色**
 
-### 3.2 错误材质
+## 3.2 错误材质
 为了更清楚的指明物体使用了不支持的着色器，我们将要使用Unity默认的错误着色器。使用Unity默认错误着色器，构造一个新的材质，错误材质可以通过调用Shader.Find("Hidden/InternelErrorShader")获得。把这个材质缓存在静态字段中，因为我们不想要每帧都创建以。然后把它赋给绘图设置的overrideMaterail这个属性。
 ```c#
 static Material errrorMaterial;
@@ -552,7 +552,7 @@ void DrawUnsupportedShaders()
 *使用洋红色的错误着色器渲染*
 
 现在所有的无效的对象都看得见，并且错误显而易见。
-### 3.3 部分类
+## 3.3 部分类
 绘制无效的物体在开发阶段非常有用，但是它不适用于发布版本的app。因此，让我们把这些只在编辑器可用的代码放到一个单独的部分类文件中。拷贝CamerRenderer重命名为CameraRenderer.Editor。
 
 ![](https://catlikecoding.com/unity/tutorials/custom-srp/custom-render-pipeline/editor-rendering/two-assets.png)
@@ -597,7 +597,7 @@ partial class CameraRenderer {
 ```
 现在构建编译成功了。编译器会剥离掉所有的partial修饰的不是完整定义的方法。
 
-### 3.4 绘制小工具(Gizmos)
+## 3.4 绘制小工具(Gizmos)
 *Gizmo这个单词中文不好找贴切的词语，在下文中就不翻译了*
 目前我们的渲染管线(RP)，在场景窗口和游戏窗口都没有绘制Gizmos，即便是它们都被启用的情况下。
 
@@ -690,10 +690,10 @@ partial void PrepareForSceneWindow ();
 
 *UI在场景窗口中可见了*
 
-## 4 多相机
+# 4 多相机
 一个场景中可以有多个活动的相机。因此，我们要确保它们一起工作。
 
-### 4.1 两个相机
+## 4.1 两个相机
 每个相机都有一个深度值，主相机默认为-1。它们按照深度递增渲染。要看这个，请复制一个主相机，重命名为Secondary Camera, 设置它的深度为0。给它一个新的tag，因为MainCamera这个tag只能被一个相机使用。
 ![](https://catlikecoding.com/unity/tutorials/custom-srp/custom-render-pipeline/multiple-cameras/two-cameras-sample-sample.png)
 
@@ -720,7 +720,7 @@ PrepareForSceneWindow();
 
 *每个相机样本分离*
 
-### 4.2 解决缓冲区名字修改的问题
+## 4.2 解决缓冲区名字修改的问题
 尽管frame debugger现在每个相机独立显示样本层次结构，当我们进入游戏模式时，Unity控制台输出警告信息显示：BeginSample和EndSample次数必须匹配。因为我们样本和缓冲区使用了不同的名称，引擎就搞不清楚了。除此之外，每次访问相机的name属性还会导致内存分配，这是我们构建时不想要的。
 
 要处理这些问题，我们添加一个SampleName的字符串属性。如果我们在编辑器中，我们就在PrepareBuffer中修改缓冲区的名字，否则就用字符常量作为Render Camera的别名。
@@ -790,7 +790,7 @@ partial class CameraRenderer {
 
 *Editor-only分配很明显*
 
-### 4.3 层级
+## 4.3 层级
 通过调整相机的Culling Mask，可以配置为只观察确定层级的物体。要看到这个行为，让我们把使用standard shader到Ignore Raycast层。
 
 ![](https://catlikecoding.com/unity/tutorials/custom-srp/custom-render-pipeline/multiple-cameras/ignore-raycast-layer.png)
@@ -813,7 +813,7 @@ partial class CameraRenderer {
 
 *只有Ignore Raycast层在游戏窗口中可见*
 
-### 4.4 清除标记
+## 4.4 清除标记
 我们可以调整第二个相机的清除标记，来合并两个相机的渲染结果。清楚标记被定义在CameraClearFlags这个枚举中，我们可以通过相机的clearFlags获得。在clear操作之前访问。
 ```c#
 void Setup()
