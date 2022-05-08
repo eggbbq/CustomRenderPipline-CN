@@ -10,7 +10,7 @@
 
 这个系列假定你通过了[对象管理](https://catlikecoding.com/unity/tutorials/object-management/)系列和[程序化网格](https://catlikecoding.com/unity/tutorials/procedural-grid/)系列教程。
 
-这个教程使用Unity 2019.2.6f1制作(*实际上，你可以用以上的任意版本来做*)
+这个教程使用Unity 2019.2.6f1制作(*实际上，你可以用更高的任意版本来实践*)
 
 ![](https://catlikecoding.com/unity/tutorials/custom-srp/custom-render-pipeline/tutorial-image.jpg)
 
