@@ -10,7 +10,7 @@
 
 ![](https://catlikecoding.com/unity/tutorials/custom-srp/draw-calls/tutorial-image.jpg)
 
-*大量球体但是draw call很少*
+*大量球体但是Draw Call很少*
 
 # 着色器(Shader)
 *Shader属于术语，在后面的篇幅中，将不在翻译这个单词。*
@@ -327,3 +327,19 @@ Properties {
 现在，可以用我们的着色器创建多个材质，每个都一个定义不同的颜色。
 
 # 批处理
+每次Draw Call都需要CPU和GPU通信。如果发送大量数据到CPU，可能会因为等待白白浪费时间。同时如果CPU忙于发送数据，它就干不了别的事情。两个问题都会让帧率变慢。此时，我们的方法直接了当：每个对象一个Draw Call。这是最浪费的方法，尽管我们同一时刻发送的数据量很小。
+
+举个例子，我做了个场景，放六6个球体，它们分别用4中材质中的一个（红，绿，黄，蓝）。需要78个Draw Call来渲染，76个用于小球，一个用于天空盒，一个用于清理渲染目标。
+
+![](https://catlikecoding.com/unity/tutorials/custom-srp/draw-calls/batching/76-spheres.png)
+
+*76个球体，78个Draw Call*
+
+如果你打开i游戏窗口的状态面板，你可以看到渲染帧的预览。有趣的是，这里有77个批次，清理操作被忽略了，节约了0个批次。
+
+![](https://catlikecoding.com/unity/tutorials/custom-srp/draw-calls/batching/statistics.png)
+
+*游戏窗体统计数据*
+
+# 2.1 SRP批处理器
+批处理是合并Draw Call的程序，减少CPU和GPU通信时间。批处理最简单的方法就是开启SRP批处理器。然而，它只有在着色器兼容时才会起作用，我们的Unlit着色器不兼容。你可以通过选中它，查看面板来验证。那里有一个SRP批处理器行，指明了不兼容，在下面给出了一个不兼容的原因。
