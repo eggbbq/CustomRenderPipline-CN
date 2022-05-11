@@ -712,6 +712,250 @@ protected override RenderPipeline CreatePipeline()
 我们不需要编写一个单独的着色器来之支持透明材质。只需在我们的Unlit着色器的基础上做一点工资，就能同时支持不透明和透明渲染。
 
 # 混合模式
+不透明和透明渲染的主要不同是，是否替换之前的绘制或是否与上一次绘制合成产生透视效果。我们可以通过设置源和目标的混合模式来控制。这里源指的是当前绘制的结果，目标指的是之前绘制的结果以及最终结果要绘制的地方。添加两个着色器属性，_SrcBlend 和_DstBlend。它们是混合模式的枚举值，但是我们能用的最合适的类型是Float，把源的默认值设置为1，目标的默认值设置为0。
+```c#
+Properties {
+    _BaseColor("Color", Color) = (1.0, 1.0, 1.0, 1.0)
+    _SrcBlend ("Src Blend", Float) = 1
+    _DstBlend ("Dst Blend", Float) = 0
+}
+```
+为了让编辑更容易，我们添加一个Enum属性到属性，用全namespace定义的UnityEngine.Rendering.BlendMode枚举类型作为参数。
+```c#
+[Enum(UnityEngine.Rendering.BlendMode)] _SrcBlend ("Src Blend", Float) = 1
+[Enum(UnityEngine.Rendering.BlendMode)] _DstBlend ("Dst Blend", Float) = 0
+```
 
+![](https://catlikecoding.com/unity/tutorials/custom-srp/draw-calls/transparency/opaque-blend-modes.png)
 
+*不透明混合模式*
 
+默认值表示不透明混合配置。源设置为1，表示把它完全叠加，而目标设置为0，表示它被忽略。
+
+标准透明源的混合模式是SrcAlpha，它意思是渲染的颜色的RGB项乘以它的alpha项。所以，alpha越小，它就越弱。混合的目标源与之设置相反；OneMinusSrcAlpha(1-alpha), 总权重为1.
+
+![](https://catlikecoding.com/unity/tutorials/custom-srp/draw-calls/transparency/transparent-blend-modes.png)
+
+*透明混合模式*
+
+混合模式可以在Pass块中定义，使用Blend语句，后面中括号中跟着我们访问的属性。 这是着色器编程出现之前的旧语法。
+```c#
+Pass {
+    Blend [_SrcBlend] [_DstBlend]
+
+    HLSLPROGRAM
+    …
+    ENDHLSL
+}
+```
+![](https://catlikecoding.com/unity/tutorials/custom-srp/draw-calls/transparency/semitransparent-spheres.png)
+
+*半透明的黄色球形*
+
+# 3.2 不写深度值
+透明渲染通常不会写入深度缓冲，因为它并不会因此而受益，反而有可能产生不希望的结果。我们可以通过ZWrite语句，控制是否写入深度。我们继续使用一个着色器属性，这次用_ZWrite。
+```c#
+Blend [_SrcBlend] [_DstBlend]
+ZWrite [_ZWrite]
+```
+用自定义枚举值Enum(Off, 0, On, 1)定义这个着色器属性。Enum(Off, 0, On, 1)创造了0 1开关，默认值为1。
+```c#
+[Enum(UnityEngine.Rendering.BlendMode)] _SrcBlend ("Src Blend", Float) = 1
+[Enum(UnityEngine.Rendering.BlendMode)] _DstBlend ("Dst Blend", Float) = 0
+[Enum(Off, 0, On, 1)] _ZWrite ("Z Write", Float) = 1
+```
+![](https://catlikecoding.com/unity/tutorials/custom-srp/draw-calls/transparency/z-write-off.png)
+
+*关闭深度写入*
+
+# 纹理
+以前我们使用一张alpha贴图来生成不均匀的半透明材质。让我们在着色器中添加_BaseMap纹理属性，也支持它。这时，属性类型是2D，我们采用Unity标准的白色材质作为默认值(*通过使用white字符串指定*)。同时纹理属性还需要以{}结尾。它在很早以前机用于控制纹理设置了，直到今天它任用用于防止一些清晰下防止一些奇怪的错误。
+```c#
+    _BaseMap("Texture", 2D) = "white" {}
+    _BaseColor("Color", Color) = (1.0, 1.0, 1.0, 1.0)
+```
+![](https://catlikecoding.com/unity/tutorials/custom-srp/draw-calls/transparency/material-with-texture.png)
+
+*有纹理的材质*
+
+纹理需要上传到GPU内存中，Unity会帮我做这事。着色器需要一个相关纹理的句柄，就像我们定义uniform值一样，不同之处是我们使用TEXTURE2D这个宏传入名字作为参数。我们还需要给纹理定义个采样器状态，它控制如何采、考虑包装和过滤模式。它是通过SAMPLER这个宏来定义，做法类似TEXTURE2D不过名字要以sampler前缀。与Unity自动提供的采样器名字匹配。
+
+纹理和采样器状态时着色器资源。它们不能为每个实例提供，必须声明为全局的。在UnitPass.hlsl的着色器属性之前，加上这些。
+```c#
+TEXTURE2D(_BaseMap);
+SAMPLER(sampler_BaseMap);
+
+UNITY_INSTANCING_BUFFER_START(UnityPerMaterial)
+    UNITY_DEFINE_INSTANCED_PROP(float4, _BaseColor)
+UNITY_INSTANCING_BUFFER_END(UnityPerMaterial)
+```
+除此之外，Unity还通过一个float4来实现纹理的平铺和偏移，变量名需要用纹理属性的名字加上_ST后缀。这个属性需要时UnityPerMaterial的一部分，因此它可以在每个实例中设置。
+```c#
+UNITY_INSTANCING_BUFFER_START(UnityPerMaterial)
+    UNITY_DEFINE_INSTANCED_PROP(float4, _BaseMap_ST)
+    UNITY_DEFINE_INSTANCED_PROP(float4, _BaseColor)
+UNITY_INSTANCING_BUFFER_END(UnityPerMaterial)
+```
+采样纹理需要纹理坐标，它时顶点属性的一部分。确切的说，我们需要第一对纹理坐标，总共有8对。它是通过在Attributes中添加一个float2的字段，语义采样TEXTURE0。纹理空间尺寸通常用UV命名，因为它用于base map，所以我们会把它名为baseUV。
+```c#
+struct Attributes {
+    float3 positionOS : POSITION;
+    float2 baseUV : TEXCOORD0;
+    UNITY_VERTEX_INPUT_INSTANCE_ID
+};
+```
+我们需要把纹理坐标传到片段函数中，因为纹理采样在那里。所以也在Varyings中连接一个float2的baseUV。这次我们不需要添加特殊函数，它就是我们传递的数据，不需要GPU特殊注意。但是，我们还是要给他赋予一些意义。我们可以使用任何无用的标识符，就简单地用VAR_BASE_UV吧。
+```c#
+struct Varyings {
+    float4 positionCS : SV_POSITION;
+    float2 baseUV : VAR_BASE_UV;
+    UNITY_VERTEX_INPUT_INSTANCE_ID
+};
+```
+在UnityPassVertex复制纹理坐标的时候，我们要应用_BaseMap_ST中的缩放和偏移。我在逐顶点中做，而不是在逐像素中。XY存储缩放，ZW存储偏移，我们可以通过swizzle访问属性。
+
+```c#
+Varyings UnlitPassVertex (Attributes input) {
+    …
+
+    float4 baseST = UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _BaseMap_ST);
+    output.baseUV = input.baseUV * baseST.xy + baseST.zw;
+    return output;
+}
+```
+UV坐标现在通过三角形插值，可用于UnlitPassFragment了。通过SAMPLE_TEXTURE2D宏采用纹理，需要传入纹理、采样器状态、纹理坐标，作为参数。最终的颜色会把纹理采样的颜色和baseColor相乘。
+
+```c#
+float4 UnlitPassFragment (Varyings input) : SV_TARGET {
+    UNITY_SETUP_INSTANCE_ID(input);
+    float4 baseMap = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, input.baseUV);
+    float4 baseColor = UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _BaseColor);
+    return baseMap * baseColor;
+}
+```
+![](https://catlikecoding.com/unity/tutorials/custom-srp/draw-calls/transparency/textured.png)
+
+*纹理映射的黄色球体*
+
+因为纹理的RGB数据是均匀统一的白色，所以RGB颜色值不会受到影响(1*x=x)。但是alpha通道不一样，所以透明部分不在均匀。
+
+# Alpha裁剪
+另一重透视表面是通过镂空。通过丢弃一些渲染的片元，着色器也可以做到这一点。这个方法会产生硬边，而不是平滑的过度。这个技术就是alpha裁剪。通常的做法是定义个镂空的阈值。alpha在阈值之下的被丢弃，其他则保留。
+
+添加一个_Cutoff属性，默认值设置为0.5。因为alpha值介于0~1,我们用Range(0.0, 1.0)作为它的类型。
+```c#
+    _BaseColor("Color", Color) = (1.0, 1.0, 1.0, 1.0)
+    _Cutoff ("Alpha Cutoff", Range(0.0, 1.0)) = 0.5
+```
+
+把它也添加到UnlitPass.hlsl的材质属性中。
+```c#
+UNITY_DEFINE_INSTANCED_PROP(float4, _BaseColor)
+UNITY_DEFINE_INSTANCED_PROP(float, _Cutoff)
+```
+我们可以在UnlitPassFragment中调用clip来丢弃片段。如果我们传入9或则更小，它会中并且丢弃片段。把最终颜色的透明度减去阈值，传入clip
+
+```c#
+    float4 baseMap = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, input.baseUV);
+    float4 baseColor = UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _BaseColor);
+    float4 base = baseMap * baseColor;
+    clip(base.a - UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _Cutoff));
+    return base;
+```
+
+![](https://catlikecoding.com/unity/tutorials/custom-srp/draw-calls/transparency/cutoff-inspector.png)
+
+![](https://catlikecoding.com/unity/tutorials/custom-srp/draw-calls/transparency/cutoff-scene.png)
+
+*Alpha镂空设置为0.2*
+
+材质通过用透明混合或则alpha裁剪，它们不会同时使用。一个典型的剪切材质是，完全不透明的，除了被丢弃的片段，并写入深度缓冲区。它使用AlphaTest渲染队列，这意味这它在所有不透明物体渲染之后渲染。这样做是因为丢弃片段使用一些GPU优化变得不可能，因为三角形不在认为是全球遮挡背后的物体。通过绘制一个完全不透明的物体，首先它可能覆盖透明裁剪物体的一部分，这样就不需要处理隐藏部分的片段。
+![](https://catlikecoding.com/unity/tutorials/custom-srp/draw-calls/transparency/clipped-inspector.png)
+
+![](https://catlikecoding.com/unity/tutorials/custom-srp/draw-calls/transparency/clipped-scene.png)
+
+*Alpha裁剪材质*
+
+要优化这项工作，我们需要确保只有在需要的时候才使用clip。我们可以添加着色器功能属性开关。属性开关值默认为0，添加一个Toggle属性，用来控制着色器字段。它的名字不重要，用_Clipping即可。
+
+```c#
+_Cutoff ("Alpha Cutoff", Range(0.0, 1.0)) = 0.5
+[Toggle(_CLIPPING)] _Clipping ("Alpha Clipping", Float) = 0
+```
+![](https://catlikecoding.com/unity/tutorials/custom-srp/draw-calls/transparency/alpha-clipping-off.png)
+
+*透明裁剪关闭*
+
+# 3.5 着色器功能
+启用开关会添加_CLIIPING关键字到材质的激活的关键字列表中，关闭开关会把它移除。但是，这些不是自动的。我们需要告诉Unity，基于关键字是否开启，为我们的着色器编译不同的版本。通过添加#pragma shader_feature _CLIPPING指令到Pass中可以做到。
+
+```c#
+    #pragma shader_feature _CLIPPING
+    #pragma multi_compile_instancing
+```
+现在Unity会编译一个带有和一个不带_CLIPPING的版本。它依赖我们的的材质配置，成一个或多个变体。因此我们让代码有前提条件，就像我们做include防御一样。我们可以用#ifdef _CLIPPING, 但我更喜欢 #if defined(_CLIPPING).
+
+```c#
+#if defined(_CLIPPING)
+    clip(base.a - UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _Cutoff));
+#endif
+```
+
+# 3.6 每个物体镂空
+因为镂空是UnityPerMaterial缓冲的一部分，它可以每个实例单独配置。因此，让我们把它这个功能添加到PerObjectMaterialProperties中。与添之前添加颜色类似，除了我们SetFloat而不是SetColor。
+```c#
+static int baseColorId = Shader.PropertyToID("_BaseColor");
+    static int cutoffId = Shader.PropertyToID("_Cutoff");
+
+    static MaterialPropertyBlock block;
+
+    [SerializeField]
+    Color baseColor = Color.white;
+
+    [SerializeField, Range(0f, 1f)]
+    float cutoff = 0.5f;
+
+    …
+
+    void OnValidate () {
+        …
+        block.SetColor(baseColorId, baseColor);
+        block.SetFloat(cutoffId, cutoff);
+        GetComponent<Renderer>().SetPropertyBlock(block);
+    }
+```
+
+![](https://catlikecoding.com/unity/tutorials/custom-srp/draw-calls/transparency/cutoff-per-object-inspector.png)
+
+![](https://catlikecoding.com/unity/tutorials/custom-srp/draw-calls/transparency/cutoff-per-object-scene.png)
+
+*每个实例化对象单独alpha镂空*
+
+# 3.7 Alpha裁剪小球
+MeshBall也是一样的。刚才我们用一个裁剪材质，但是所有的实例最终具有同样的孔洞。
+![](https://catlikecoding.com/unity/tutorials/custom-srp/draw-calls/transparency/alpha-clipped-ball.png)
+
+*密集的alpha裁剪的小球*
+
+让我们添加一些变化，给每个实例一线随机旋转和0.5-1.5的随机所发。我们将改变它们颜色的alpha为0.5-1之间，而不是为每个实例设最cutoff阈值。这样控制不那么精确，但它只是一个随机的例子而已。
+```c#
+matrices[i] = Matrix4x4.TRS(
+    Random.insideUnitSphere * 10f,
+    Quaternion.Euler(
+        Random.value * 360f, Random.value * 360f, Random.value * 360f
+    ),
+    Vector3.one * Random.Range(0.5f, 1.5f)
+);
+baseColors[i] =
+    new Vector4(
+        Random.value, Random.value, Random.value,
+        Random.Range(0.5f, 1f)
+    );
+```
+![](https://catlikecoding.com/unity/tutorials/custom-srp/draw-calls/transparency/more-varied-ball.png)
+
+*小球更加多变*
+
+注意，Unity任然发送一个每个实例的cutoff数组到GPU，即便它们一模一样。它是材质属性的副本，所以改变材质的属性值，可以一次改变所有小球的孔洞。
+
+到此为止，我们的无光照着色器，为下个教程的复杂着色器打好了基础。
