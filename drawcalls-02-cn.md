@@ -703,3 +703,15 @@ protected override RenderPipeline CreatePipeline()
 现在可以通过我们的RP改变这些方法。切换选项会立即生效，因为Unity编辑器检测到资源变化时，会立即创建一个新的RP实例。
 
 # 透明度
+我们的着色器可用于创建不透明材质。改变颜色的alpha值，通常表示透明，但是目前不会有效果。我们可以把渲染队列设置到*Transparent*，但是它是改变绘制顺序，而不会改变绘制方法。
+
+![](https://catlikecoding.com/unity/tutorials/custom-srp/draw-calls/transparency/reduced-alpha.png)
+
+*降低透明，使用透明渲染队列*
+
+我们不需要编写一个单独的着色器来之支持透明材质。只需在我们的Unlit着色器的基础上做一点工资，就能同时支持不透明和透明渲染。
+
+# 混合模式
+
+
+
