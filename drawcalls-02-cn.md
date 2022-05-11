@@ -171,12 +171,12 @@ float4 UnlitPassVertex (float3 positionOS : POSITION) : SV_POSITION {
 
 *ShaderLibray文件夹中UnityInput文件*
 
-文件开始写入CUSTOM_UNITY_INPUT_INCLUDED这个include防御，然后在全局作用域中，定义一个float4x4矩阵，命名为unity\_ObjectToWorld。在c#中，这就可能是一个字段，但是这里称之为uniform值（?统一值）。它在每次绘制时由GPU设置，在顶点和片段绘制期间的所有调用都不变。
+文件开始写入CUSTOM_UNITY_INPUT_INCLUDED这个include防御，然后在全局作用域中，定义一个float4x4矩阵，命名为unity_ObjectToWorld。在c#中，这就可能是一个字段，但是这里称之为uniform值（?统一值）。它在每次绘制时由GPU设置，在顶点和片段绘制期间的所有调用都不变。
 ```c#
 #ifndef CUSTOM_UNITY_INPUT_INCLUDED
 #define CUSTOM_UNITY_INPUT_INCLUDED
 
-float4x4 unity\_ObjectToWorld;
+float4x4 unity_ObjectToWorld;
 
 #endif
 ```
@@ -197,7 +197,7 @@ float3 TransformObjectToWorld (float3 positionOS) {
 ```c#
 float3 TransfromObjectToWorld(float positionOS)
 {
-    return mul(unity\_ObjectToWorld, float4(positionOS,1).xyz;
+    return mul(unity_ObjectToWorld, float4(positionOS,1).xyz;
 }
 ```
 现在我们在UnitPassVertex中，转换到世界空间。首先，直接在这个函数上面引入Common.hlsl。由于它是在另一个文件夹，我们可以动工相对路径*../ShaderLibrary/Common.hlsl*访问到。然后使用TransfromObjectToWorld计算positionWS变量，然后用它替换对象空间位置，作为函数返回。
@@ -211,17 +211,17 @@ float4 UnlitPassVertex (float3 positionOS:POSITION):SV_POSITION
 ```
 这个结果还是错的，因为我们需要齐次裁剪空间的坐标。这个空间定义了一个立方体，包含了任何相机观察空间的物体，在透视相机的情况下扭曲成一个梯形。从世界空间转换到这个空间，可以通过乘以视图投影矩阵完成，它记录了相机的位置，旋转，投影，视野(FOV)，远近裁剪平面。把它添加到UnityInput.hls中。
 ```c#
-float4x4 unity\_ObjectToWorld;
-float4x4 unity\_MatrixVP;
+float4x4 unity_ObjectToWorld;
+float4x4 unity_MatrixVP;
 ```
 添加一个叫TransformWorldToHClip到Common.hlsl中，就像添加TransfromObjectToWorld一样的操作，不同是输入变成世界空间，使用另一个矩阵，产生一个float4。
 ```c#
 float3 TransformObjectToWorld (float3 positionOS) {
-    return mul(unity\_ObjectToWorld, float4(positionOS, 1.0)).xyz;
+    return mul(unity_ObjectToWorld, float4(positionOS, 1.0)).xyz;
 }
 
 float4 TransformWorldToHClip (float3 positionWS) {
-    return mul(unity\_MatrixVP, float4(positionWS, 1.0));
+    return mul(unity_MatrixVP, float4(positionWS, 1.0));
 }
 ```
 让UnlitPassVertex使用这个函数返回了正确的空间的位置。
@@ -240,43 +240,43 @@ float4 UnlitPassVertex(float3 positionOS:POSITION):SV_POSITION
 我们定义的这两个函数，太常用了，Core RP Pipeline包中也包含了它们。核心库定义了许多有用且基本东东西，因此让我们安装它，删掉我们的定义导入相关的文件。这个实例，使用*Packages/com.unity.render-pipelines.core/ShaderLibrary/SpaceTransform.hlsl*
 ```c#
 //float3 TransformObjectToWorld (float3 positionOS) {
-//    return mul(unity\_ObjectToWorld, float4(positionOS, 1.0)).xyz;
+//    return mul(unity_ObjectToWorld, float4(positionOS, 1.0)).xyz;
 //}
 
 //float4 TransformWorldToHClip (float3 positionWS) {
-//    return mul(unity\_MatrixVP, float4(positionWS, 1.0));
+//    return mul(unity_MatrixVP, float4(positionWS, 1.0));
 //}
 
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/SpaceTransforms.hlsl"
 ```
-这里无法编译，因为SpaceTransform.hlsl不会认为unity\_ObjectToWorld存在。相反，它期望相关的矩阵使用UNITY_MATRIX_M这个宏定义，所以让我们在引入文件之前，单独一行写#define UNITY_MATRIX_M unity\_ObjectToWorld。在这之后，所有的UNITY_MATRIX_M都会被替换成unity\_ObjectToWorld。这是有原因的，我们之后在讲。
+这里无法编译，因为SpaceTransform.hlsl不会认为unity_ObjectToWorld存在。相反，它期望相关的矩阵使用UNITY_MATRIX_M这个宏定义，所以让我们在引入文件之前，单独一行写#define UNITY_MATRIX_M unity_ObjectToWorld。在这之后，所有的UNITY_MATRIX_M都会被替换成unity_ObjectToWorld。这是有原因的，我们之后在讲。
 ```c#
-#define UNITY_MATRIX_M unity\_ObjectToWorld
+#define UNITY_MATRIX_M unity_ObjectToWorld
 
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/SpaceTransforms.hlsl"
 ```
-逆矩阵unity\_WorldToObject也是一个道理，它应该用UNITY_MATRIX_I_M定义，unity\_MatrixV对应UNITY_MATRIX_V，unity\_MatrixVP对应UNITY_MATRIX_VP。最后投影矩阵通过UNITY_MATRIX_P定义，它由glstate_matrix_projection提供。我们目前不需要这些额外的矩阵，但是如果不引入它们就没有办法通过编译。
+逆矩阵unity_WorldToObject也是一个道理，它应该用UNITY_MATRIX_I_M定义，unity_MatrixV对应UNITY_MATRIX_V，unity_MatrixVP对应UNITY_MATRIX_VP。最后投影矩阵通过UNITY_MATRIX_P定义，它由glstate_matrix_projection提供。我们目前不需要这些额外的矩阵，但是如果不引入它们就没有办法通过编译。
 ```c#
-#define UNITY_MATRIX_M unity\_ObjectToWorld
-#define UNITY_MATRIX_I_M unity\_WorldToObject
-#define UNITY_MATRIX_V unity\_MatrixV
-#define UNITY_MATRIX_VP unity\_MatrixVP
+#define UNITY_MATRIX_M unity_ObjectToWorld
+#define UNITY_MATRIX_I_M unity_WorldToObject
+#define UNITY_MATRIX_V unity_MatrixV
+#define UNITY_MATRIX_VP unity_MatrixVP
 #define UNITY_MATRIX_P glstate_matrix_projection
 ```
 把这些额外的矩阵也添加到UnityInput中。
 ```c#
-float4x4 unity\_ObjectToWorld;
-float4x4 unity\_WorldToObject;
+float4x4 unity_ObjectToWorld;
+float4x4 unity_WorldToObject;
 
-float4x4 unity\_MatrixVP;
-float4x4 unity\_MatrixV;
+float4x4 unity_MatrixVP;
+float4x4 unity_MatrixV;
 float4x4 glstate_matrxi_projection;
 ```
-最后个缺少的东西不是矩阵。是unity\_WorldTransformParams, 它包含一些转换信息，也是目前我们不需要的。它是一个向量，使用real4定义，他不是一个有效的类型，而是一个float4或者half4的别名，具体取决与平台。
+最后个缺少的东西不是矩阵。是unity_WorldTransformParams, 它包含一些转换信息，也是目前我们不需要的。它是一个向量，使用real4定义，他不是一个有效的类型，而是一个float4或者half4的别名，具体取决与平台。
 ```c#
-float4x4 unity\_ObjectToWorld;
-float4x4 unity\_WorldToObject;
-real4 unity\_WorldTransformParams;
+float4x4 unity_ObjectToWorld;
+float4x4 unity_WorldToObject;
+real4 unity_WorldTransformParams;
 ```
 这个别名和一些其他基本的宏是根据图形API定义的，我们通过引入*Packages/com.unity.render-pipelines.core/ShaderLibrary/Common.hlsl*。在我们的Common.hlsl里面在引入UnityInput.hlsl之前这么做。如果你对这些内容好奇，你可以查看导入包中的这些文件。
 ```c#
@@ -312,7 +312,7 @@ float4 UnlitPassFragment () : SV_TARGET {
     return _BaseColor;
 }
 ```
-我们又回到了黑色，因为默认值为0。要把这个属性连接到材质，我们要在Properties添加 \_BaseColor。
+我们又回到了黑色，因为默认值为0。要把这个属性连接到材质，我们要在Properties添加 _BaseColor。
 ```c#
 Properties {
         _BaseColor("Color", Color) = （1.0,1.0,1.0,1.0,）
@@ -350,13 +350,13 @@ Properties {
 
 比起减少Draw Call数量，SRP批处理器更精简。它缓存材质属性到GPU，不必每次Draw Call都发送这些数据。这个同时减少了CPU每帧通信的数据和工作。但只有着色器坚持使用一个严格的统计的数据结构才起作用。
 
-所有的材质属性都被定义在了一个具体的内存缓冲里，而不是是全局级别的。这是通过把\_BaseColor声明包装在一个cbuffer区块中，并且cbuffer使用UnityPerMaterial名字。它的工作类似于结构体声明。它把\_BaseColor房子一个特殊的常量缓冲区来隔离，尽管还是可以通过全局访问。
+所有的材质属性都被定义在了一个具体的内存缓冲里，而不是是全局级别的。这是通过把_BaseColor声明包装在一个cbuffer区块中，并且cbuffer使用UnityPerMaterial名字。它的工作类似于结构体声明。它把_BaseColor房子一个特殊的常量缓冲区来隔离，尽管还是可以通过全局访问。
 ```c#
 cbuffer UnityPerMaterial{
    float _BaseColor;
 };
 ```
-如果需要在UnityPerMaterial中的话，我们还必须对unity\_ObjectToWorld, unity\_WorldToObject, unity\_WorldTransformParams这样做，
+如果需要在UnityPerMaterial中的话，我们还必须对unity_ObjectToWorld, unity_WorldToObject, unity_WorldTransformParams这样做，
 ```c#
 CBUFFER_START(UnityPerDraw)
     float4x4 unity_ObjectToWorld;
@@ -364,7 +364,7 @@ CBUFFER_START(UnityPerDraw)
     real4 unity_WorldTransformParams;
 CBUFFER_END
 ```
-如果需要，我们定义一组特殊的只。对于转换组来说，我们还需要引入一个float4 unity\_LODFace的向量，即使现在我们不需要它。变量的位置不重要，但是Unity把它直接放到unity\_WorldToObject后面，我们也这样做。
+如果需要，我们定义一组特殊的只。对于转换组来说，我们还需要引入一个float4 unity_LODFace的向量，即使现在我们不需要它。变量的位置不重要，但是Unity把它直接放到unity_WorldToObject后面，我们也这样做。
 ```c#
 CBUFFER_START(UnityPerDraw)
     float4x4 unity_ObjectToWorld;
@@ -504,7 +504,7 @@ float4 UnlitPassVertex (Attributes input) : SV_POSITION {
     return TransformWorldToHClip(positionWS);
 }
 ```
-这已经足以使GPU实例化工作了，然而SRP批处理器优先，所以我们得到的结果没有什么不同。但是我们还没有支持每个实例材质不同数据。我们需要把\_BaseColor替换成数组。用UNITY_INSTANCING_BUFFER_START替换CBUFFER_START， 用UNITY_INSTANCING_BUFFER_END替换CBUFFER_END, UNITY_INSTANCING_BUFFER_END需要一个参数，没有强制和UNITY_INSTANCING_BUFFER_START一样，但也没有什么理由让它们不同。
+这已经足以使GPU实例化工作了，然而SRP批处理器优先，所以我们得到的结果没有什么不同。但是我们还没有支持每个实例材质不同数据。我们需要把_BaseColor替换成数组。用UNITY_INSTANCING_BUFFER_START替换CBUFFER_START， 用UNITY_INSTANCING_BUFFER_END替换CBUFFER_END, UNITY_INSTANCING_BUFFER_END需要一个参数，没有强制和UNITY_INSTANCING_BUFFER_START一样，但也没有什么理由让它们不同。
 
 ```c#
 //CBUFFER_START(UnityPerMaterial)
@@ -641,3 +641,65 @@ GraphicsSettings.useScriptableRenderPipelineBatching = false;
 静态合批的工作方式类似，但它是通过标记batching-static来预先生成。除了需要更多的内存和存储空间之外，没有什么注意的。渲染管线不会察觉，所以我们不必担心。
 
 # 2.6 配置批处理
+采用哪种方式最好可能会有所有不同，所以我们动态合批让可配置。首先添加一个变量控制，DrawVisibleGeomety是否使用动态和批或者GPU实例化。
+```c#
+void DrawVisibleGeometry (bool useDynamicBatching, bool useGPUInstancing) {
+   var sortingSettings = new SortingSettings(camera) {
+     criteria = SortingCriteria.CommonOpaque
+   };
+   var drawingSettings = new DrawingSettings(
+        unlitShaderTagId, sortingSettings
+   ) {
+       enableDynamicBatching = useDynamicBatching,
+       enableInstancing = useGPUInstancing
+       };
+       …
+}
+```
+渲染器现在必须提供这个配置，然后以来RP来提供它。
+```c#
+public void Render(ScriptableRenderContext context, Camera camera,
+    bool userDynamicBatching, bool userGUPInstancing)
+{
+    ...
+    DrawVisibleGeometry(useDyanmicBatching, useGPUIntancing);
+    ...
+}```
+CustomRenderPipeline通过构造方法接收这两个参数，并存储在字段里面，然后在把他们传递到渲染器中。
+```c#
+bool useDynamicBatching, useGPUInstncing;
+
+public CustomRenderPipeline(bool useDynamicBatching, bool useGPUInstancing, bool useSRPBatcher)
+{
+    this.useDynamicBatching = useDynamicBatching;
+    this.useGPUInstancing = useGPUInstancing;
+    GraphicsSetting.useScriptableRenderPipelineBatching = useSRPBatcher;
+}
+
+protected override void Render(ScriptableRenderContext context, Cameras[] cameras)
+{
+    foreach(Camera camera in cameras)
+    {
+        renderer.Render(
+            context, camera, useDynamicBatching, useGPUInstancing
+        );
+    }
+}
+```
+最后，添加三个选项作为配置字段到CustomRenderPipelineAsset中，通过调用CreatePipeline把他们传递到构造函数中。
+```c#
+[SerializeField]
+bool useDynamicBatching = true, useGPUInstancing = true, useSRPBatcher = true;
+
+protected override RenderPipeline CreatePipeline()
+{
+    return new CustomRenderPipeline(useDynamicBatching, useGPUInstancing, useSRPBatcher);
+}
+```
+![](https://catlikecoding.com/unity/tutorials/custom-srp/draw-calls/batching/rp-configuration.png)
+
+*RP配置*
+
+现在可以通过我们的RP改变这些方法。切换选项会立即生效，因为Unity编辑器检测到资源变化时，会立即创建一个新的RP实例。
+
+# 透明度
