@@ -393,13 +393,251 @@ public CustomRenderPipeline () {
 
 *一个SRP批次*
 
-# 多种颜色
+# 很多颜色
 即便使用了4个材质，也只有一个批次。之所以可行，是因为他们的数据都被缓存到了GPU，每次绘制只需要包含一个偏移量就得到了正确的内存地址。唯一的限制是每个材质的内存布局必须一样。我们的材质都是用同一个着色器，只包含一个颜色属性，符合这种情况。Unity不会比较材质的内存布局，它简单的把使用相同的着色器变体批量绘制。
 
 如果我们只需要很少的不同颜色话，这样做是没有问题的。但是如果我们想要每个小球，都有自己的颜色，我们就不得不创建很多材质。如果我们可以给每个小球设置颜色，就更方便了。默认情况下，这是不可能的，但是我们可以创建一个自定义的组建来支持。把它就叫做PerObjectMaterialProperties。由于它是个示例，我们把它放到Custom RP下的Examples文件夹。
 
+这个想法是，一个游戏对象有一个PerObjectMaterialProperties组件，可以配置Base Color，用它设置材质属性_BaseColor。它还需要知道着色器属性标识符，我可以通过Shader.PropertyToID检索并把它存储到一个静态变量中，就如之前在CameraRender存储着色器标识符一样，只不过这次是要给整数。
+```c#
+using UnityEngine;
+
+[DisallowMultipleComponent]
+public class PerObjectMaterialProperties : MonoBehaviour {
+
+    static int baseColorId = Shader.PropertyToID("_BaseColor");
+
+    [SerializeField]
+    Color baseColor = Color.white;
+}
+```
+
+![](https://catlikecoding.com/unity/tutorials/custom-srp/draw-calls/batching/per-object-material-properties.png)
+
+*PerObjectMaterailProperties组件*
+
+通过MaterialPropertyBlock设置每个材质的属性。所有的PerObjectMaterialProperties可以通用一个MaterialPropertyBlock实例, 所以把它声明为静态字段。
+```c#
+static MaterialPropertyBlock block;
+```
+如果block不存在，就创建一个，然后传入属性标识和颜色，调用SetColor方法，最后通过SetPropertyBlock，把这个block应用到游戏对象的Render组件, 该组件会复制其设置。在OnValidate这个事件函数中编写这些代码，以便于在编辑器中立即看到结果。
+```c#
+void OnValidate () {
+        if (block == null) {
+            block = new MaterialPropertyBlock();
+        }
+        block.SetColor(baseColorId, baseColor);
+        GetComponent<Renderer>().SetPropertyBlock(block);
+    }
+```
+>OnValidate何时被调用?<br>
+OnValidate在Unity编辑器中，当组件被加载或被修改是调用。因此，各个颜色会立即响应编辑。
+
+我把这个组件添加到了24个小球并赋予不同的颜色。
+
+![](https://catlikecoding.com/unity/tutorials/custom-srp/draw-calls/batching/many-colors.png)
+
+*很多颜色*
+
+不幸的是，SRP批处理器不能处理每个物体材质属性。因此，24个小球都退回到普通的Draw Call，由于排序，还可能会将其他小球分割成多个批次。
 
 
+![](https://catlikecoding.com/unity/tutorials/custom-srp/draw-calls/batching/24-non-batched.png)
 
+*24个没有合批的Draw Call*
 
+与此同时，OnValidate方法在构建版本中不会被调用。要让颜色出现，我们还要在Awake中调用它，这里我们简单调用一下OnValidate方法。
+```c#
+void Awake () {
+        OnValidate();
+    }
+```
 
+# 2.3 GPU实例化
+还有另一个方法来合并Draw Call, 它对每个材质属性都有效。这就是众所周知的GPU实例化，它把多个使用同一个网格的物体一次绘制。CPU搜集每个物体的变换和材质属性，把他们放到数组中发送到GPU。GPU遍历所有条目，用指定的顺序渲染它们。
+
+因为GPU实例化需要提供数组数据，我们的着色器不支持它。要支持它的第一步，是在我们的着色器二Pass中，在顶点和片段程序之前，添加#pragma multi_compile_instancing指令。
+
+```c#
+#pragma multi_compile_instancing
+#pragma vertex UnlitPassVertex
+#pragma fragment UnlitPassFragment
+```
+这会使Unity生成两个我们的着色器的变体，一个支持GPU实例化，一个不支持。材质查看面板会出现一个开关选项，允许我们选择那个版本的变体应用到材质。
+
+![](https://catlikecoding.com/unity/tutorials/custom-srp/draw-calls/batching/gpu-instancing-material.png)
+
+*开启GPU实例化的材质*
+
+支持GPU实例化需要改变方法，为此我们要添加核心库的UnityInstancing.hlsl文件。它必须在UNITY_MATRIX_M之后在添加SpaceTransforms.hlsl之前。
+```c#
+#define UNITY_MATRIX_P glstate_matrix_projection
+
+#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/UnityInstancing.hlsl"
+#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/SpaceTransforms.hlsl"
+```
+UnityInstancing.hlsl做的事情就是重新定义宏来访问实例化数组数据。但是要使它起作用，它需要知道当前渲染物体的索引。缩影有顶点数据提供，因此我们必须使它可用。UnityInstancing.hlsl定义了一些宏来简化这个操作，但是它假设我们的顶点函数有个结构体参数。
+
+可以声明一个结构体，就像cbuffer一样，然后把它当成函数的参数。我们还要定义结构内部的语义。这个方法的好处是比长长的数据参数列表更容易阅读。因此将positionOS参数放到Attributes结构体中，表示顶点的输入数据。
+```c#
+struct Attributes {
+    float3 positionOS : POSITION;
+};
+
+float4 UnlitPassVertex (Attributes input) : SV_POSITION {
+    float3 positionWS = TransformObjectToWorld(input.positionOS);
+    return TransformWorldToHClip(positionWS);
+}
+```
+GPU实例化时，对象索引也可当成一个顶点属性。我们可以简单地在Attributes中放一个UNITY_VERTEXT_INPUT_ID。
+```c#
+struct Attributes {
+    float3 positionOS : POSITION;
+    UNITY_VERTEX_INPUT_INSTANCE_ID
+};
+````
+接下来，添加UNITY_SETUP_INSTANCE_ID到UnlitPassVertex的开始位置。它会从输入中提取索引，并存储到其他实例化宏所以依赖的全局静态变量中。
+```c#
+float4 UnlitPassVertex (Attributes input) : SV_POSITION {
+    UNITY_SETUP_INSTANCE_ID(input);
+    float3 positionWS = TransformObjectToWorld(input.positionOS);
+    return TransformWorldToHClip(positionWS);
+}
+```
+这已经足以使GPU实例化工作了，然而SRP批处理器优先，所以我们得到的结果没有什么不同。但是我们还没有支持每个实例材质不同数据。我们需要把\_BaseColor替换成数组。用UNITY_INSTANCING_BUFFER_START替换CBUFFER_START， 用UNITY_INSTANCING_BUFFER_END替换CBUFFER_END, UNITY_INSTANCING_BUFFER_END需要一个参数，没有强制和UNITY_INSTANCING_BUFFER_START一样，但也没有什么理由让它们不同。
+
+```c#
+//CBUFFER_START(UnityPerMaterial)
+//    float4 _BaseColor;
+//CBUFFER_END
+UNITY_INSTANCING_BUFFER_START(UnityPerMaterial)
+    float4 _BaseColor;
+UNITY_INSTANCING_BUFFER_END(UnityPerMaterial)
+```
+然后，用UNITY_DEFINE_INSTANCINF_PROP(float4, _BaseColor)替换_BaseColor。
+```c#
+UNITY_INSTANCING_BUFFER_START(UnityPerMaterial)
+    //float4 _BaseColor;
+    UNITY_DEFINE_INSTANCED_PROP(float4, _BaseColor)
+UNITY_INSTANCING_BUFFER_END(UnityPerMaterial)
+```
+在实例化时，我们现在还需要让实例索引在UnitPassFragment中可用。为了简化这个操作，我们会用一个结构体持有UnlitPassVertex输出的位置和索引数据，使用UNITY_TRANSFER_INSTANCE_ID(input, output)来复制复制存在的索引。跟Unity一样，我们把这个结构体命名为Varying，隐喻它包含的数据能在同个三角形的片段程序中发生变化的。
+```c#
+struct Varyings {
+    float4 positionCS : SV_POSITION;
+    UNITY_VERTEX_INPUT_INSTANCE_ID
+};
+
+Varyings UnlitPassVertex (Attributes input) { //: SV_POSITION {
+    Varyings output;
+    UNITY_SETUP_INSTANCE_ID(input);
+    UNITY_TRANSFER_INSTANCE_ID(input, output);
+    float3 positionWS = TransformObjectToWorld(input.positionOS);
+    output.positionCS = TransformWorldToHClip(positionWS);
+    return output;
+}
+```
+把这个结构体作为UnlitPassFragment的参数。然后像之前那样用UNITY_SETUP_INSTANCE_ID让所以可用。材质属性现在必须通过UNITY_ACCESS_INSTANCE_PROP(UnityPerMaterial, _BaseColor)来访问。
+```c#
+float4 UnlitPassFragment (Varyings input) : SV_TARGET {
+    UNITY_SETUP_INSTANCE_ID(input);
+    return UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _BaseColor);
+}
+```
+![](https://catlikecoding.com/unity/tutorials/custom-srp/draw-calls/batching/instanced-draw-calls.png)
+
+*实例化需要的Draw Call*
+
+现在Unity可以把24个不同颜色的小球合并, 减少Draw Call数量。最后我们得到4个Draw Call，是因为这小球使用了4个不同的材质。GPU实例化只对使用同一个材质的物体起作用。虽然小球覆写了材质的颜色但是它们仍然使用相同的材质，所以它们可以在一个批次中绘制。
+![](https://catlikecoding.com/unity/tutorials/custom-srp/draw-calls/batching/one-instanced-material.png)
+
+*实例化一个材质*
+
+需要注意，批次的大小是有限制的，它取决于据目标平台和每个实例需要的数据量。如果你超过了一个批次的限制，就会有多个批次。同时，如果使用多个材质，排序也可能造成批次分割成多个。
+
+# 2.4 绘制多个实例化的网格
+当上百个物体可以合并成一次Draw Call时, GPU实例化成为一个显著的优势。在场景中手动编辑这么多物体不切实际，因此我们用脚本随机生成一堆。创建一个MashBall的示例组件，在Awake时复制大量的物体。让我们把_BaseColor缓存起来，同时给网格和材质一个配置选项。
+```c#
+using UnityEngine;
+
+public class MeshBall : MonoBehaviour {
+
+    static int baseColorId = Shader.PropertyToID("_BaseColor");
+
+    [SerializeField]
+    Mesh mesh = default;
+
+    [SerializeField]
+    Material material = default;
+}
+```
+新建个GameObject挂上这个组件。我给它默认小球来绘制。
+
+![](https://catlikecoding.com/unity/tutorials/custom-srp/draw-calls/batching/mesh-ball-component.png)
+
+*小球的MeshBall组件*
+
+我们可以复制很多游戏五i他，但是我们不这么干。我们设置一个变换矩阵数组和颜色数组，然后让GPU用它们来渲染。这是就是GPU实例化最有用的地方。我们一次提供1023个实例，所以把数组长度设置为它，同时我们需要传递颜色数据和MaterPropertyBlock。颜色数组类型时Vector4。
+```c#
+Matrix4x4[] matrices = new Matrix4x4[1023];
+Vector4[] baseColors = new Vector4[1023];
+
+MaterialPropertyBlock block;
+```
+创建一个Awake方法，用随机位置和颜色填充数组。
+
+```c#
+void Awake () {
+    for (int i = 0; i < matrices.Length; i++) {
+        matrices[i] = Matrix4x4.TRS(
+            Random.insideUnitSphere * 10f, Quaternion.identity, Vector3.one
+        );
+        baseColors[i] =
+            new Vector4(Random.value, Random.value, Random.value, 1f);
+    }
+}
+```
+在Update中，调用block.SetVectorArray来设置颜色。之后调用Graphics.DrawMeshInstanced，参数依次为网格，子网格索引(此时用0)，材质，矩阵数组，元素数量，属性block。
+```c#
+void Update () {
+    if (block == null) {
+        block = new MaterialPropertyBlock();
+        block.SetVectorArray(baseColorId, baseColors);
+    }
+    Graphics.DrawMeshInstanced(mesh, 0, material, matrices, 1023, block);
+}
+```
+![](https://catlikecoding.com/unity/tutorials/custom-srp/draw-calls/batching/mesh-ball.png)
+
+*1023个小球，3个Draw Call*
+
+进入运行模式，限制会生成密集的小球。多少个Draw Call依赖于平台，因为每个Draw Call的最大缓存大小不同。在我的这个例子中，渲染要3个Draw Call。
+
+注意，各个网格的绘制顺序跟我们提供的数据顺序相同。这里不会排序不会遮挡剔除，尽管一旦离开视锥体，整个批次都会消失。
+
+# 2.5 动态合批
+还有第三个方法来减少Draw Call, 被称之为 动态合批。这时个古老的技术，把多个共享材质的细小网格合并成一个大的网格来绘制。每个物体使用不同的材质属性时，它也不会生效。
+
+大的网格生成困难，所以只适用于小的网格。球体太大了，但立方体可以。为了观察动态合批的行为，在CameraRender中，关闭GPU实例化，把enableDynamicBatching设置为true。
+```c#
+var drawingSettings = new DrawingSettings(
+    unlitShaderTagId, sortingSettings
+) {
+    enableDynamicBatching = true,
+    enableInstancing = false
+};
+```
+同时禁用SRP批处理器，因为它的优先级更高。
+```c#
+GraphicsSettings.useScriptableRenderPipelineBatching = false;
+```
+
+![](https://catlikecoding.com/unity/tutorials/custom-srp/draw-calls/batching/cubes.png)
+
+*绘制立方体*
+
+一般情况下，GPU实例化比动态合批更好。动态合批也有一些注意事项，例如当涉及不同的尺度时，不能保证较大网格的法线向量是单位化。同时，绘制顺序会改变，因为它们时一个整体网格了。
+
+静态合批的工作方式类似，但它是通过标记batching-static来预先生成。除了需要更多的内存和存储空间之外，没有什么注意的。渲染管线不会察觉，所以我们不必担心。
+
+# 2.6 配置批处理
