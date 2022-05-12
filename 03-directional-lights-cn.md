@@ -140,3 +140,64 @@ base.rgb = normalize(input.normalWS);
 *插值之后单位化*
 
 # 1.4 表面属性
+着色器中的光照就是模拟光线和它照射物体的相互作用，它意味着我们必须持续跟踪表面的属性。现在我们有法线和基本颜色。我们可以把后者分割成两个部分：RGB颜色和alpha值。我们绘制多个地方使用它，因此让我们定义一个方便的*Surface*结构体来包含所有相关的数据。把这个*Surface*HLSL文件放入一个独立放在*ShaderLibrayry*文件夹中。
+```c#
+#ifndef CUSTOM_SURFACE_INCLUDED
+#define CUSTOM_SURFACE_INCLUDED
+struct Surface
+{
+    float3 normal;
+    float3 color;
+    float alpha;
+}
+#endif
+```
+>我们不应该把法线定义为normalWS吗?<br>
+可以这么做，但是表面并不管线法线是在哪个空间中定义的。光照计算可以在任何适当的3D空间中执行。所以我们就去掉了空间相关的定义。当要填充数据的时候，我们必须在任何地方都用同个空间。我们将使用世界空间，之后我们也可以切换到另一个空间，一切还是同样起作用。
+
+把它引入到LitPass中，放到Common之后。这样我们可以保持LitPass简短。从现在开始，我们会把特定的代码放在它自己的HLSL文件中，方便查找相关的功能。
+```c#
+#include "../ShaderLibrary/Common.hlsl"
+#include "../ShaderLibrary/Surface.hlsl"
+```
+在LitPassFragment中定义一个*surface*变量，然后填充它。
+```c#
+Surface surface;
+surface.normal = normalize(input.normalWS);
+surface.color  = base.rgb;
+surface.alpha  = base.a;
+
+return float4(surface.color, surface.alpha);
+```
+>这样的代码不会效率低下吗?<br>
+不会有什么区别的，因为着色器编译器会生成高度优化的代码，完全重写我们的代码。结构体完全是为了我们方便。你可以通过着色器的查看面板下面的查看代码按钮，查看编译结果。
+
+# 1.5 光照计算
+要计算实际的光照，我们创建一个*GetLighting*方法，需要传入一个*Surface*参数。一开始让它返回表面法线的Y值。因为我们会把它光照功能放到一个独立的*Lighting HLSL*文件中。
+```c#
+#ifndef CUSTOM_LIGHTING_INCLUDED
+#define CUSTOM_LIGHTING_INCLUDED
+
+float3 GetLighting (Surface surface) {
+    return surface.normal.y;
+}
+#endif
+```
+把它引入到LitPass中，放在引入*Surface*之后，因为*Lighting*依赖它。
+```c#
+#include "../ShaderLibrary/Surface.hlsl"
+#include "../ShaderLibrary/Lighting.hlsl"
+```
+>为什么不在*Lighting*中引入*Surface*?<br>
+可以这么做，但是会导致多个文件交叉依赖。我选中把所有的引入语句放在一个地方，它能使依赖清晰。也方便替换文件，来改变着色器的工作方式，只要新的文件依赖同样的功能。
+
+线我们可以在LitPassFragment中获得光照，用于片段的RGB部分。
+```c#
+float3 color = GetLighting(surface);
+    return float4(color, surface.alpha);
+```
+![](https://catlikecoding.com/unity/tutorials/custom-srp/directional-lights/lighting/diffuse-lighting-from-above.png)
+
+*从上面照射的漫反射*
+
+
