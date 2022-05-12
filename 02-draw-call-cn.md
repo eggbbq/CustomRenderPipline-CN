@@ -1,4 +1,4 @@
-# Draw Calls <sub>着色器和批次</sub>
+# Draw Call <sub>着色器和批次</sub>
 - *编写HLSL着色器*
 - *支持SRP批处理，GPU实例化，动态合批*
 - *配置每个对象的材质属性，随机大量绘制*
