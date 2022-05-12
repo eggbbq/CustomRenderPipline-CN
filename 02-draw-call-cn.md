@@ -31,12 +31,11 @@ Unity的通用管线和高清管线允许你使用**Shader Graph**来设计着�
 着色器代码大部分看起来，很像混合了一对古老语法的c#。着色器代码定义就像一个class, 只不过它以Shader关键字开始，接下来是材质的属性清单。让我们使用CustomRp/Unlit, 大致看看代码结构。
 
 ```c#
-Shader "Custom RP/Unlit" {
-
+Shader "Custom RP/Unlit"
+{
     Properties {}
-
-    SubShader {
-
+    SubShader
+    {
         Pass {}
     }
 }
@@ -52,12 +51,13 @@ Shader "Custom RP/Unlit" {
 # 1.2 HLSL程序
 我们要写的着色器代码叫做High-Level Shading Language,简称HLSL。我们必须把它放在Pass区块中，用HLSLPROGRAM和ENDHLSL关键词包起来。之所以这样做，是因为Pass区块中还可能放其他不是HLSL的代码。
 ```c#
-Pass {
+Pass
+{
     HLSLPROGRAM
     ENDHLSL
 }
 ```
-要绘制一个网格，GPU需要把它的三角形光栅化，转换成像素数据。其过程大致上是，把顶点坐标从3D空间到2D可视化空间的顶点坐标转换，然后用像素填充最终的三角形。这个两个步骤分别有两个单独的着色器程序控制，二者我们都需要定义。第一个被称为顶点着色器，第二个被称为片段着色器。片段着色器对应一个显示像素绘制纹理纹素，当有其他东西在它之后绘制到它的上面时，它可能会被覆盖，所以它并不一定代表最终的结果。
+要绘制一个网格，GPU需要把它的三角形光栅化，转换成像素数据。其过程大致上是，把顶点坐标从3D空间到2D可视化空间的顶点坐标转换，然后用像素填充最终的三角形。这个两个步骤分别由两个单独的着色器程序控制，二者我们都需要定义。第一个被称为顶点着色器，第二个被称为片段着色器。片段着色器对应一个显示像素绘制纹理纹素，当有其他东西在它之后绘制到它的上面时，它可能会被覆盖，所以它并不一定代表最终的结果。
 
 我们需要通过pragma指令定义顶点和片段程序名称。这是个单行语句，以#pragma开始，跟着是vertex或者fragment，加上相应的名字。这里我们用UnlitPassVertex和UnlitPassFragment。
 ```c#
@@ -66,7 +66,7 @@ Pass {
     #pragma fragment UnlitPassFragment
     ENDHLSL
 ```
-现在着色器编译器会抱怨找不到声明的着色器内核。我们还需要编写同名的HLSL代码的具体实现。我们可以直接在#pragma指令之后编写代码，但是我们会把所以的HLSL代码放大一个单独的文件中。我们用这个UnlitPass.hlsl文件，把它放在shader同一个文件夹内，还要添加一个#include指令后面带上相关的文件路径，让着色器编译器插入这个文件的内容。
+现在着色器编译器会抱怨找不到声明的着色器内核。我们还需要编写同名的HLSL代码的具体实现。我们可以直接在#pragma指令之后编写代码，但是我们会把所有的HLSL代码放在一个单独的文件中。我们用这个UnlitPass.hlsl文件，把它放在shader同一个文件夹内，还要添加一个#include指令后面带上相关的文件路径，让着色器编译器插入这个文件的内容。
 ```c#
 HLSLPROGRAM
 #pragma vertex UnlitPassVertex
@@ -80,10 +80,10 @@ Unity还没有菜单来创建HLSL文件，你要自己创建它。
 
 *UnlitPass HLSL资源文件*
 
-# 1.3 Include防御
-*Include这个单词的中文，暂时不好找简单明了的对应词语。对于程序员来说，都知道它是什么，所以就不用翻译了。*
+# 1.3 *文件包含*防御(Incude guard)
+*Include这个单词的中文。直译是包含，这个翻译显然不那么形象。所以，我觉得import会比include的中文，更直观。*
 
-HLSL文件向c#类文件一样组织代码，虽然HLSL没有类的概念。除了代码块的本地作用域之外，它只有一个全局作用域。因此，任何东西都可以在任何地方访问。引入文件也没有命名空间这个一说。它就是通过include这个指令，插入整个文件。如果你多次include同一个文件，代码就重复了，会导致编译器错误。为了防止这个事情，我们就要添加一个include的防御代码到UnitlPass.hlsl中。
+HLSL文件像c#类文件一样组织代码，只是HLSL没有类的概念。除了代码块的本地作用域之外，它只有一个全局作用域。因此，任何东西都可以在任何地方访问。*包含文件*也没有命名空间这个一说。它就是通过*include*这个指令，插入整个文件。如果你多次*包含(include)*同一个文件，代码就重复了，会导致编译器错误。为了防止这个事情，我们就要添加一个*包含(include)*的防御代码到*UnitlPass.hlsl*中。
 
 用#define指令可以定义任何标识符，通常为大写。我在文件顶部定义CUSTOM_UNLIT_PASS_INCLUDED。
 ```c#
@@ -100,10 +100,10 @@ HLSL文件向c#类文件一样组织代码，虽然HLSL没有类的概念。除�
 #define CUSTOM_UNLIT_PASS_INCLUDED
 #endif
 ```
-现在我们可以确保所有相关的代码，即便多次导入也不会插入多次。
+现在我们可以确保所有相关的代码，即便多次包含也不会插入多次。
 
 # 1.4 着色器函数
-我们在include防御中，定义我们的着色器函数。跟没有访问修饰符的c#方法一样。以一个简单的空函数开始吧。
+我们在include防御的区块中，定义我们的着色器函数。跟没有访问修饰符的c#方法一样。以一个简单的空函数开始吧。
 ```c#
 #ifndef CUSTOM_UNLIT_PASS_INCLUDED
 #define CUSTOM_UNLIT_PASS_INCLUDED
@@ -132,9 +132,9 @@ float4 UnlitPassFragment () {
 >我们应该使用float或者half精度吗?<br>
 大多数的移动设备GPU都支持精度类型，half会更高效。所以，如果你正在优化移动设备性能，可以使用half精度。大多数经验是，位置和纹理坐标使用float 其他使用half，就足以产生足够好的结果了。<br>
 如果不是移动设备平台，精度就没有意义，因为GPU总是用float，即便我们写half。这个系列教程，我会始终使用float。<br>
-还有一个叫fixed的类型，但是只有老的移动硬件平台支持。它通常和half等效。
+还有一个叫fixed的类型，但是只有老的移动硬件平台支持，它通常和half等效。
 
-此时，着色器会变一失败，因为我们的函数没有语义。我们必须指明我们返回的值是什么，因为我们可能产生很多同意义的数据。这个时候，我们提供为渲染目标提供系统默认值，通过在函数参数列表后面写个:SV_TARGET。
+此时，着色器会编译失败，因为我们的函数没有语义。我们必须指明我们返回的值是什么，因为我们可能产生很多同意义的数据。这个时候，我们提供为渲染目标提供系统默认值，通过在函数参数列表后面写个:SV_TARGET。
 ```c#
 float4 UnlitPassFragment () : SV_TARGET {
     return 0.0;
@@ -156,7 +156,7 @@ float4 UnlitPassVertex (float3 positionOS) : SV_POSITION {
 >顶点位置不是flaot4?<br>
 3D空间中的点，通常用4D向量定义，第四个项为1，如果表示方向时，则为0。作者这部分讲得比较简略。请查阅【齐次坐标】，以获得更全面的知识。这一小段就不翻译了。
 
-我们也同样添加语义到输入参数中，因为点点数据不仅仅包含位置信息。这个例子中我们需要POSITION，如下
+我们也同样添加语义到输入参数中，因为顶点数据不仅仅包含位置信息。这个例子中我们需要POSITION，如下
 ```c#
 float4 UnlitPassVertex (float3 positionOS : POSITION) : SV_POSITION {
     return float4(positionOS, 1.0);
@@ -166,7 +166,7 @@ float4 UnlitPassVertex (float3 positionOS : POSITION) : SV_POSITION {
 
 *使用对象空间位置*
 
-网格在此显示了，但是不正确，因为我们输出的位置信息用错了空间。空间转换需要一些矩阵，他们在物体绘制时被传染到GPU。我们需要添加这些矩阵到我们的着色器中，但是由于他们重视一样的，我们就把它放到一个单独的HLSL文件中当成一个标准的输入，即能保持代码结构化，又能其他的shader文件引入。添加一个UnityInout.hlsl文件，放到Custom RP下的ShaderLibrary文件夹中，就跟Unity渲染管线的文件结构一样。
+网格在此显示了，但是不正确，因为我们输出的位置信息用错了空间。空间转换需要一些矩阵，他们在物体绘制时被传染到GPU。我们需要添加这些矩阵到我们的着色器中，但是由于他们重视一样的，我们就把它放到一个单独的HLSL文件中当成一个标准的输入，即能保持代码结构化，又能其他的shader文件包含。添加一个UnityInout.hlsl文件，放到Custom RP下的ShaderLibrary文件夹中，就跟Unity渲染管线的文件结构一样。
 
 ![](https://catlikecoding.com/unity/tutorials/custom-srp/draw-calls/shaders/shader-library.png)
 
@@ -181,7 +181,7 @@ float4x4 unity_ObjectToWorld;
 
 #endif
 ```
-我们用矩阵把对象空间转换到世界空间。由于这是一个很常用的功能，让我们为它创建一个函数，放在另一个文件中，这次我们叫它Common.hlsl，同样放到ShaderLibary文件中。我们引入UnityInput，然后声明一个方法叫TransformObjectToWorld，输入一个float3参数，返回一个float3。
+我们用矩阵把对象空间转换到世界空间。由于这是一个很常用的功能，让我们为它创建一个函数，放在另一个文件中，这次我们叫它Common.hlsl，同样放到ShaderLibary文件中。我们包含*UnityInput*，然后声明一个方法叫TransformObjectToWorld，输入一个float3参数，返回一个float3。
 ```c#
 #ifndef CUSTOM_COMMON_INCLUDED
 #define CUSTOM_COMMON_INCLUDED
@@ -201,7 +201,7 @@ float3 TransfromObjectToWorld(float positionOS)
     return mul(unity_ObjectToWorld, float4(positionOS,1).xyz;
 }
 ```
-现在我们在UnitPassVertex中，转换到世界空间。首先，直接在这个函数上面引入Common.hlsl。由于它是在另一个文件夹，我们可以动工相对路径*../ShaderLibrary/Common.hlsl*访问到。然后使用TransfromObjectToWorld计算positionWS变量，然后用它替换对象空间位置，作为函数返回。
+现在我们在UnitPassVertex中，转换到世界空间。首先，直接在这个函数上面包含 *Common.hlsl*。由于它是在另一个文件夹，我们可以动工相对路径*../ShaderLibrary/Common.hlsl*访问到。然后使用TransfromObjectToWorld计算positionWS变量，然后用它替换对象空间位置，作为函数返回。
 ```c#
 #include "../ShaderLibrary/Common.hlsl"
 float4 UnlitPassVertex (float3 positionOS:POSITION):SV_POSITION
@@ -238,7 +238,7 @@ float4 UnlitPassVertex(float3 positionOS:POSITION):SV_POSITION
 *正确的黑色球形*
 
 # 1.6 核心库
-我们定义的这两个函数，太常用了，Core RP Pipeline包中也包含了它们。核心库定义了许多有用且基本东东西，因此让我们安装它，删掉我们的定义导入相关的文件。这个实例，使用*Packages/com.unity.render-pipelines.core/ShaderLibrary/SpaceTransform.hlsl*
+我们定义的这两个函数，太常用了，Core RP Pipeline包中也包含了它们。核心库定义了许多有用且基本东东西，因此让我们安装它，删掉我们的定义包含相关的文件。这个实例，使用*Packages/com.unity.render-pipelines.core/ShaderLibrary/SpaceTransform.hlsl*
 ```c#
 //float3 TransformObjectToWorld (float3 positionOS) {
 //    return mul(unity_ObjectToWorld, float4(positionOS, 1.0)).xyz;
@@ -250,13 +250,13 @@ float4 UnlitPassVertex(float3 positionOS:POSITION):SV_POSITION
 
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/SpaceTransforms.hlsl"
 ```
-这里无法编译，因为SpaceTransform.hlsl不会认为unity_ObjectToWorld存在。相反，它期望相关的矩阵使用UNITY_MATRIX_M这个宏定义，所以让我们在引入文件之前，单独一行写#define UNITY_MATRIX_M unity_ObjectToWorld。在这之后，所有的UNITY_MATRIX_M都会被替换成unity_ObjectToWorld。这是有原因的，我们之后在讲。
+这里无法编译，因为SpaceTransform.hlsl不会认为unity_ObjectToWorld存在。相反，它期望相关的矩阵使用UNITY_MATRIX_M这个宏定义，所以让我们在包含文件之前，单独一行写#define UNITY_MATRIX_M unity_ObjectToWorld。在这之后，所有的UNITY_MATRIX_M都会被替换成unity_ObjectToWorld。这是有原因的，我们之后在讲。
 ```c#
 #define UNITY_MATRIX_M unity_ObjectToWorld
 
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/SpaceTransforms.hlsl"
 ```
-逆矩阵unity_WorldToObject也是一个道理，它应该用UNITY_MATRIX_I_M定义，unity_MatrixV对应UNITY_MATRIX_V，unity_MatrixVP对应UNITY_MATRIX_VP。最后投影矩阵通过UNITY_MATRIX_P定义，它由glstate_matrix_projection提供。我们目前不需要这些额外的矩阵，但是如果不引入它们就没有办法通过编译。
+逆矩阵unity_WorldToObject也是一个道理，它应该用UNITY_MATRIX_I_M定义，unity_MatrixV对应UNITY_MATRIX_V，unity_MatrixVP对应UNITY_MATRIX_VP。最后投影矩阵通过UNITY_MATRIX_P定义，它由glstate_matrix_projection提供。我们目前不需要这些额外的矩阵，但是如果不包含它们就没有办法通过编译。
 ```c#
 #define UNITY_MATRIX_M unity_ObjectToWorld
 #define UNITY_MATRIX_I_M unity_WorldToObject
@@ -279,7 +279,7 @@ float4x4 unity_ObjectToWorld;
 float4x4 unity_WorldToObject;
 real4 unity_WorldTransformParams;
 ```
-这个别名和一些其他基本的宏是根据图形API定义的，我们通过引入*Packages/com.unity.render-pipelines.core/ShaderLibrary/Common.hlsl*。在我们的Common.hlsl里面在引入UnityInput.hlsl之前这么做。如果你对这些内容好奇，你可以查看导入包中的这些文件。
+这个别名和一些其他基本的宏是根据图形API定义的，我们通过包含 *Packages/com.unity.render-pipelines.core/ShaderLibrary/Common.hlsl*。在我们的Common.hlsl里面在导入 *UnityInput.hlsl*之前这么做。如果你对这些内容好奇，你可以查看导入包中的这些文件。
 ```c#
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Common.hlsl"
 #include "UnityInput.hlsl"
@@ -365,7 +365,7 @@ CBUFFER_START(UnityPerDraw)
     real4 unity_WorldTransformParams;
 CBUFFER_END
 ```
-如果需要，我们定义一组特殊的只。对于转换组来说，我们还需要引入一个float4 unity_LODFace的向量，即使现在我们不需要它。变量的位置不重要，但是Unity把它直接放到unity_WorldToObject后面，我们也这样做。
+如果需要，我们定义一组特殊的只。对于转换组来说，我们还需要包含一个float4 unity_LODFace的向量，即使现在我们不需要它。变量的位置不重要，但是Unity把它直接放到unity_WorldToObject后面，我们也这样做。
 ```c#
 CBUFFER_START(UnityPerDraw)
     float4x4 unity_ObjectToWorld;

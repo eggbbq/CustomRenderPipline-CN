@@ -17,7 +17,7 @@
 如果我们想创造更真实的场景，我们就必须模拟光线对物体表面的影响。这需要比我们目前这个无光照着色更复杂的着色器。
 
 # 1.1 光照着色器
-复制一份UnlitPass.hlsl重命名为LitPass.hlsl。调整引入防御定义，以及顶点和片段函数名。我们在稍后加入光照计算。
+复制一份UnlitPass.hlsl重命名为LitPass.hlsl。调整导入防御定义，以及顶点和片段函数名。我们在稍后加入光照计算。
 ```c#
 #ifndef CUSTOM_LIT_PASS_INCLUDED
 #define CUSTOM_LIT_PASS_INCLUDED
@@ -26,17 +26,17 @@ Varyings LitPassVertex(Attributes input){...}
 float4 LitPassFragment(Varyings input):SV_TARGET {...}
 #endif
 ```
-同样复制一份Unlit shader并且重命名为Lit。改变它的菜单名称、引入的文件，以及使用的函数名。让我们吧默认的颜色修改成灰色，因为一个纯白的表面在光照充足的场景中会特别亮。通用管线也是默认使用灰色。
+同样复制一份Unlit shader并且重命名为Lit。改变它的菜单名称、包含的文件，以及使用的函数名。让我们吧默认的颜色修改成灰色，因为一个纯白的表面在光照充足的场景中会特别亮。通用管线也是默认使用灰色。
 ```c#
 Shader "Custom RP/Lit"
 {
-    Properties 
+    Properties
     {
         _BaseMap("Texture", 2D) = "white"{}
         _BaseColor("Color", Color) = (0.5, 0.5, 0.5, 1.0)
         ...
     }
-    SubShader 
+    SubShader
     {
         Pass
         {
@@ -155,7 +155,7 @@ struct Surface
 >我们不应该把法线定义为normalWS吗?<br>
 可以这么做，但是表面并不管线法线是在哪个空间中定义的。光照计算可以在任何适当的3D空间中执行。所以我们就去掉了空间相关的定义。当要填充数据的时候，我们必须在任何地方都用同个空间。我们将使用世界空间，之后我们也可以切换到另一个空间，一切还是同样起作用。
 
-把它引入到LitPass中，放到Common之后。这样我们可以保持LitPass简短。从现在开始，我们会把特定的代码放在它自己的HLSL文件中，方便查找相关的功能。
+把它包含到LitPass中，放到Common之后。这样我们可以保持LitPass简短。从现在开始，我们会把特定的代码放在它自己的HLSL文件中，方便查找相关的功能。
 ```c#
 #include "../ShaderLibrary/Common.hlsl"
 #include "../ShaderLibrary/Surface.hlsl"
@@ -183,13 +183,13 @@ float3 GetLighting (Surface surface) {
 }
 #endif
 ```
-把它引入到LitPass中，放在引入*Surface*之后，因为*Lighting*依赖它。
+把它包含到LitPass中，放在包含*Surface*之后，因为*Lighting*依赖它。
 ```c#
 #include "../ShaderLibrary/Surface.hlsl"
 #include "../ShaderLibrary/Lighting.hlsl"
 ```
->为什么不在*Lighting*中引入*Surface*?<br>
-可以这么做，但是会导致多个文件交叉依赖。我选中把所有的引入语句放在一个地方，它能使依赖清晰。也方便替换文件，来改变着色器的工作方式，只要新的文件依赖同样的功能。
+>为什么不在*Lighting*中包含*Surface*?<br>
+可以这么做，但是会导致多个文件交叉依赖。我选中把所有的包含语句放在一个地方，它能使依赖清晰。也方便替换文件，来改变着色器的工作方式，只要新的文件依赖同样的功能。
 
 线我们可以在LitPassFragment中获得光照，用于片段的RGB部分。
 ```c#
