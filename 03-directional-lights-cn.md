@@ -218,4 +218,199 @@ float3 GetLighting(Surface surface)
 要执行恰当的光照，我们还需要制动灯光的属性。这篇教程中，我们会限制值用方向光。方向光表示光源很远，它的位置无关紧要，只有方向。这是个简化模式，但是它足够用来模拟地球上的太阳光和其他一些入射光方向几乎只有一个方向的情形。
 
 # 2.1 灯光结构体
-我们用一个结构体来存储光线数据。现在我们只需要颜色和方向就够了。
+我们用一个结构体来存储光线数据。现在我们只需要颜色和方向就够了。把它放在一个独立的*Light*HLSL文件中。同时定义一个*GetDirectionalLight*函数返回一个配置的方向光。用一个白色和向上的矢量初始化，匹配我们目前使用光线数据。注意，光线的方向用光线来的方向定义，而不是光线离开的方向（*这句话有点绕，应该这样说。光线的方向定义正好与光线的照射方向相反，这个是图形学里面这么约定的）。
+```c#
+#ifndef CUSTOM_LIGHT_INCLUDE
+#define CUSTOM_LIGHT_INCLUDE
+struct Light
+{
+    float3 color;
+    float3 direction;
+};
+
+Light GetDirectionLight()
+{
+    Light light;
+    light.color = 1.0;
+    light.direction = float3(0.0, 1.0, 0.0);
+    return light;
+}
+#endif
+```
+在LitPass中*Lighting*之前包含这个文件。
+```c#
+#include "../ShaderLibrary/Light.hlsl"
+#include "../ShaderLibrary/Lighting.hlsl"
+```
+添加一个*IncomingLight*到*Lighting*文件中，用它计算给点表面的入射光线量。对于任意光线方向，我们要求表面法线的点积。我们可以用*dot*函数求点积。这个结果应该有光线的颜色调节。
+
+>光照这部分，作者写得不是太清晰。如果不了解光照模型的，这部分应该去查阅经典光照模型(Lambert/Blinn-Phong)，以便于系统的了解光照。方向这部分很简单，内容也不多。
+```c#
+float3 IncomingLight (Surface surface, Light light)
+{
+    return dot(surface.normal, light.direction) * light.color;
+}
+```
+>什么是**点积**?<br>
+这部分不翻译。因为向量/矩阵是学习的必要前提，并且作者这部分也是简略一说。相关的知识，你需要在回顾一下线性代数。
+
+但是只有在光线与表面朝向才正确。当点积为负数时，我们需要动工*saturate*函数把它挟持到0。
+```c#
+float3 IncomingLight(Surface surface, Light light)
+{
+    return saturate(dot(surface.normal, light.direction)) * light.color;
+}
+```
+>saturate做了什么?<br>
+它把值挟持到[0,1]这个范围。因为点积用于不会大于1，所以我们只需要约束最小值。
+
+添加另一个*GetLighting*函数，返回表面和光线的最终光照。现在是入射光线乘以表面颜色。在其他函数之前定义它。
+```c#
+float3 GetLighting (Surface surface, Light light)
+{
+    return IncomingLight(surface, light) * surface.color;
+}
+```
+最后，重写一个*GetLighting*函数，只需要一个表面参数，它调用另一个同名函数，使用*GetDirectionalLight*提供光线数据。
+```c#
+float3 GetLighting (Surface surface)
+{
+    return GetLighting(surface, GetDirectionalLight());
+}
+```
+# 2.3 将光线数据发送到GPU
+我们应该使用当前场景的光线，而不是向上面那样，总是使用一个白色的光线。默认的场景中有个方向光，它表示太阳，它略带黄色(#FFF4d6), 绕X周旋转50<sup>o</sup>，绕Y轴-30<sup>o</sup>旋转。如果这个灯光不存在的话，就创建一个。
+
+为了让着色器可以访问光线数据，我们需要创建统一变量，就像着色器属性一样。这里，我们定义两个float3向量：_DirectionalLightColor和_DirectionalLightDirection。把他们放到顶部的*Light*中的定义的_CustomLight的缓冲区中。
+```c#
+CBUFFER_START(_CustomLight)
+    float3 _DirectionalLightColor;
+    float3 _DirectionalLightDirection;
+CBUFFER_END
+```
+用这些值，替换GetDirectionalLight中的常数。
+```c#
+Light GetDirectionalLight ()
+{
+    Light light;
+    light.color = _DirectionalLightColor;
+    light.direction = _DirectionalLightDirection;
+    return light;
+}
+```
+现在我们的RP必须要把光线数据发送到GPU。我们将创建一个新*Lighting*类来做这件事。它与*CameraRenderer*的工作类似。创建一个Setup方法，方法需要一个上下文参数，并且在这个方法中调用过一个独立的SetupDirectionalLight方法。在指向完成之后，给他指定一个专门的命令缓冲区，虽然这不是很有必要，但是可以方便我们调试。另一个方法是添加缓冲区参数。
+```c#
+using UnityEngine;
+using UnityEngine.Rendering;
+
+public class Lighting
+{
+    const string bufferName = "Lighting";
+    CommandBuffer buffer = new CommandBuffer(){
+        name = bufferName
+    };
+
+    public void Setup(ScriptableRenderContext context)
+    {
+        buffer.BeginSample(bufferName);
+        SetupDirectionalLight();
+        buffer.EndSample(bufferName);
+        context.ExecuteCommnadBuffer(buffer);
+        buffer.clear();
+    }
+
+    void SetupDirectionalLight(){}
+}
+```
+保持跟踪这两个着色器标识符。
+```c#
+static int dirLightColorId = Shader.PropertyToID ("_DirectionalLightColor");
+static int dirLightDirectionId = Shader.PropertyToID("_DirectionalLightDirection");
+```
+我们可以通过RenderSettings.sun,获得场景的主光源。它默认提供给我们最重要的方向光，也可以通过*Window/Rendering/Lighting Settings*显示配置。使用CommandBuffer.SetGlobalVector把灯光的数据发送到GPU。颜色是灯光的线性空间颜色，方向是光线变换的前方方向取取反值。
+```c#
+void SetupDirectionalLight()
+{
+    Light light = RenderSettings.sun;
+    buffer.SetGlobalVector(dirLightColorId, light.color.linear);
+    buffer.SetGlobalVerctor(dirLightDirectionId, -light.transform.forward.direction);
+}
+```
+>SetGlobalVector不需要Vector4吗?<br>
+需要的，发送到GPU的向量总是4个项，即使我们定义更少项也是如此。多余4个，则会被着色器隐藏。同时，Vector3能隐式转换为Vector4，尽管它们表示的不是同一个方向。
+
+灯光的颜色属性是它的配置颜色，但是灯光还有一个单独的强度系数。光线最终的颜色至都必须乘上这个系数。
+```c#
+buffer.SetGlobalVector(dirLightColorId, light.color.linear * light.intensity);
+```
+给CameraRenderer一个Lighting实例，在绘制可见物体之前，用它设置光线。
+```c#
+Lighting lighting = new Lighting();
+public void Render (ScriptableRenderContext context, Camera camera,
+    bool useDynamicBatching, bool useGPUInstancing)
+{
+    …
+    Setup();
+    lighting.Setup(context);
+    DrawVisibleGeometry(useDynamicBatching, useGPUInstancing);
+    DrawUnsupportedShaders();
+    DrawGizmos();
+    Submit();
+}
+```
+![](https://catlikecoding.com/unity/tutorials/custom-srp/directional-lights/lights/lit-by-sun.png)
+
+*被太阳照亮*
+
+# 2.4 可见灯光
+当计算剔除时，Unity还会计算出哪些灯光影响相机可见空间。我们可以依靠这些信息，而不是全局太阳光。要这样做，*Lighting*需要访问剔除结果，隐藏给Setup添加一个参数，为了方便把它保存在字段中。然后我们能支持不止一个灯光，所以用一个新的方法SetupLights替换SetupDirectionalLight。
+```c#
+CullingResults cullingResults;
+
+public void Setup (ScriptableRenderContext context, CullingResults cullingResults)
+{
+    this.cullingResults = cullingResults;
+    buffer.BeginSample(bufferName);
+    //SetupDirectionalLight();
+    SetupLights();
+    …
+}
+
+void SetupLights () {}
+```
+在调用CameraRenderer.Render的Setup时，添加剔除结果作为参数。
+```c#
+lighting.Setup(context, cullingResults);
+```
+此时，Lighting.SetupLights可以通过剔除结果的visibleLights这个属性获得需要的数据。
+```c#
+using Unity.Collections;
+using UnityEngine;
+using UnityEngine.Rendering;
+
+public class Lighting
+{
+    …
+    void SetupLights ()
+    {
+        NativeArray<VisibleLight> visibleLights = cullingResults.visibleLights;
+    }
+}
+```
+>什么时NativeArray?<br>
+它是类似于数组的结构，但是提供连到接本地内存缓冲区。它让托管的c#代码与本机引擎代码共享数据更加高效。
+
+# 2.5 多个方向灯光
+使用可见灯光数据让支持多个方向灯光成为可能，但是我们需要发送所有这些灯光的数据到GPU。所以，我们会使用两个Vector4数组替代一对向量，同时加上要给灯光数量的整数。我还定义一个醉倒的方向灯数量，用它来初始化了两个数据缓冲数组。让我们将最大值设置为4，对大多数场景来说应该足够了。
+```c#
+const int maxDirLightCount = 4;
+
+//static int dirLightColorId = Shader.PropertyToID("_DirectionalLightColor");
+//static int dirLightDirectionId = Shader.PropertyToID("_DirectionalLightDirection");
+static int dirLightCountId = Shader.PropertyToID("_DirectionalLightCount");
+static int dirLightColorsId = Shader.PropertyToID("_DirectionalLightColors");
+static int dirLightDirectionsId = Shader.PropertyToID("_DirectionalLightDirections");
+
+static Vector4[] dirLightColors = new Vector4[maxDirLightCount];
+static Vector4[] dirLightDirections = new Vector4[maxDirLightCount];
+```
