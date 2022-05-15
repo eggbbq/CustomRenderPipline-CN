@@ -414,3 +414,68 @@ static int dirLightDirectionsId = Shader.PropertyToID("_DirectionalLightDirectio
 static Vector4[] dirLightColors = new Vector4[maxDirLightCount];
 static Vector4[] dirLightDirections = new Vector4[maxDirLightCount];
 ```
+添加一个索引和一个VisibleLight参数到SetupDirectionalLight。用提供的索引设置颜色和方向元素。在这种情况下，最终的颜色通过VisibleLight.finalColor属性提供。向前向量可以通过VisibleLight.localToWorldMaxix获得，它在这个矩阵的第三列，同样取反。
+```c#
+void SetupDirectionalLight (int index, VisibleLight visibleLight) {
+    dirLightColors[index] = visibleLight.finalColor;
+    dirLightDirections[index] = -visibleLight.localToWorldMatrix.GetColumn(2);
+}
+```
+最终的颜色已经应用了灯光的强度，但是默认情况Unity不会把它转换到线性空间。我们需要设置GraphicsSettings.lightsUseLinearIntensity为true，我们可以在CustomRenderPipeline的构造函数中设置一次。
+```c#
+public CustomRenderPipeline(bool useDynamicBatching, bool useGPUInstancing, bool useSRPBatcher)
+{
+    this.useDynamicBatching = useDynamicBatching;
+    this.useGPUInstancing = useGPUInstancing;
+    GraphicsSettings.useScriptableRenderPipelineBatching = useSRPBatcher;
+    GraphicsSettings.lightsUseLinearIntensity = true;
+}
+```
+下一步，在Lighting.SetupLights中遍历所有的可见灯光同时对每个灯光调用SetupDirectionalLight。然后调用缓冲区的SetGlobalInt和SetGlobalVectorArray把数据发送到GPU。
+```c#
+NativeArray<VisibleLight> visibleLights = cullingResults.visibleLights;
+for (int i = 0; i < visibleLights.Length; i++)
+{
+    VisibleLight visibleLight = visibleLights[i];
+    SetupDirectionalLight(i, visibleLight);
+}
+
+buffer.SetGlobalInt(dirLightCountId, visibleLights.Length);
+buffer.SetGlobalVectorArray(dirLightColorsId, dirLightColors);
+buffer.SetGlobalVectorArray(dirLightDirectionsId, dirLightDirections);
+```
+但是我们最多支持个方向光，因此我们需要在循环到最大的时候中断。
+```c#
+int dirLightCount = 0;
+for (int i = 0; i < visibleLights.Length; i++)
+{
+    VisibleLight visibleLight = visibleLights[i];
+    SetupDirectionalLight(dirLightCount++, visibleLight);
+    if (dirLightCount >= maxDirLightCount)
+    {
+        break;
+    }
+}
+buffer.SetGlobalInt(dirLightCountId, dirLightCount);
+```
+因为我们只支持方向光，所以我们要忽略其他灯光类型。我们可以通过检查可见灯光的lightType属性是否等于LightType.Directional。
+```c#
+VisibleLight visibleLight = visibleLights[i];
+if (visibleLight.lightType == LightType.Directional)
+{
+    SetupDirectionalLight(dirLightCount++, visibleLight);
+    if (dirLightCount >= maxDirLightCount)
+    {
+        break;
+    }
+}
+```
+虽然这样也可以正常工作，但是VisibleLight这个结构体太大了。理想情况是，我们只需要从原生数组中获取它一次，不会以普通参数的形式传递到SetupDirectionalLight, 因为这样做会拷贝这个结构体。我们可以使用和ScriptablerRenderContext.DrawRenderer方法一样的伎俩，通过引用传递参数。
+```c#
+SetupDirectionalLight(dirLightCount++, ref visibleLight);
+```
+它需要我们把参数定义成一个引用。
+```c#
+void SetupDirectionalLight (int index, ref VisibleLight visibleLight) { … }
+```
+# 着色器循环
